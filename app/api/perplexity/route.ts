@@ -87,18 +87,38 @@ export async function POST(req: Request) {
     const body = await req.json();
     console.log("Request body:", JSON.stringify(body).substring(0, 500) + "...");
     
+    // Format the request body for Perplexity API
+    const perplexityRequest = {
+      model: body.model || "sonar-small-chat", // Default model if not provided
+      messages: [
+        {
+          role: "system",
+          content: body.systemPrompt || "You are a helpful assistant."
+        },
+        {
+          role: "user",
+          content: body.prompt
+        }
+      ],
+      // Optional parameters
+      max_tokens: body.max_tokens || 1024,
+      temperature: body.temperature || 0.7,
+      // Include response format if specified
+      ...(body.response_format && { response_format: body.response_format })
+    };
+    
     // Add timeout handling
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 25000);
     
-    console.log("Calling Perplexity API...");
+    console.log("Calling Perplexity API with formatted request:", JSON.stringify(perplexityRequest).substring(0, 500) + "...");
     const response = await fetch("https://api.perplexity.ai/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${process.env.PERPLEXITY_API_KEY}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(perplexityRequest),
       signal: controller.signal,
     });
     
