@@ -80,6 +80,23 @@ export interface PerplexityCompletionResponse extends OpenAI.Chat.ChatCompletion
   usage?: PerplexityUsage;
 }
 
+// Define the type for the Perplexity API request
+interface PerplexityApiRequest {
+  model: string;
+  messages: {
+    role: string;
+    content: string;
+  }[];
+  max_tokens: number;
+  temperature: number;
+  response_format?: {
+    type: string;
+    json_schema?: {
+      schema: Record<string, unknown>;
+    };
+  };
+}
+
 export async function POST(req: Request) {
   console.log("Perplexity API route called");
   
@@ -88,8 +105,8 @@ export async function POST(req: Request) {
     console.log("Request body:", JSON.stringify(body).substring(0, 500) + "...");
     
     // Format the request body for Perplexity API
-    const perplexityRequest = {
-      model: body.model || "sonar-small-chat", // Default model if not provided
+    const perplexityRequest: PerplexityApiRequest = {
+      model: body.model || "sonar-small-chat",
       messages: [
         {
           role: "system",
@@ -100,16 +117,20 @@ export async function POST(req: Request) {
           content: body.prompt
         }
       ],
-      // Optional parameters
-      max_tokens: body.max_tokens || 1024,
-      temperature: body.temperature || 0.7,
-      // Include response format if specified
-      ...(body.response_format && { response_format: body.response_format })
+      max_tokens: 1024,
+      temperature: 0.7
     };
+    
+    // Only add response_format if it's specifically needed
+    if (body.forceJsonOutput) {
+      perplexityRequest.response_format = { type: "json_object" };
+    } else if (body.response_format) {
+      perplexityRequest.response_format = body.response_format;
+    }
     
     // Add timeout handling
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
     
     console.log("Calling Perplexity API with formatted request:", JSON.stringify(perplexityRequest).substring(0, 500) + "...");
     const response = await fetch("https://api.perplexity.ai/chat/completions", {
@@ -146,7 +167,7 @@ export async function POST(req: Request) {
     
     // Check if it's an AbortError (timeout)
     if (error instanceof Error && error.name === "AbortError") {
-      return new Response(JSON.stringify({ error: "Request timed out after 25 seconds" }), {
+      return new Response(JSON.stringify({ error: "Request timed out after 45 seconds" }), {
         status: 504,
         headers: { "Content-Type": "application/json" }
       });
