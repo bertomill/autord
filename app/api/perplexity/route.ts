@@ -19,6 +19,7 @@ import OpenAI from 'openai';
 // Add runtime configuration
 export const config = {
   runtime: 'edge',
+  regions: ['iad1'], // Use a specific region for better performance
 };
 
 // Define interfaces for API requests and responses
@@ -102,7 +103,9 @@ export async function POST(req: Request) {
   
   try {
     const body = await req.json();
-    console.log("Request body:", JSON.stringify(body).substring(0, 500) + "...");
+    
+    // Log only the first part of the request to avoid excessive logging
+    console.log("Request body type:", body.model || "sonar-small-chat");
     
     // Format the request body for Perplexity API
     const perplexityRequest: PerplexityApiRequest = {
@@ -128,14 +131,20 @@ export async function POST(req: Request) {
       perplexityRequest.response_format = body.response_format;
     }
     
-    // Add timeout handling with a longer timeout (120 seconds)
+    // Optimize the request by reducing the complexity
+    if (perplexityRequest.messages[1].content.length > 6000) {
+      console.log("Trimming long prompt from", perplexityRequest.messages[1].content.length, "to 6000 characters");
+      perplexityRequest.messages[1].content = perplexityRequest.messages[1].content.substring(0, 6000) + "...";
+    }
+    
+    // Use a shorter timeout to ensure we don't hit Vercel's limit
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       console.log("Request timeout reached, aborting...");
       controller.abort();
-    }, 120000); // Increase to 120 seconds
+    }, 50000); // 50 seconds to stay under Vercel's 60s limit
     
-    console.log(`[${new Date().toISOString()}] Calling Perplexity API with formatted request:`, JSON.stringify(perplexityRequest).substring(0, 500) + "...");
+    console.log(`[${new Date().toISOString()}] Calling Perplexity API`);
     
     try {
       const response = await fetch("https://api.perplexity.ai/chat/completions", {
@@ -148,10 +157,8 @@ export async function POST(req: Request) {
         signal: controller.signal,
       });
       
-      console.log(`[${new Date().toISOString()}] Perplexity API response received`);
+      console.log(`[${new Date().toISOString()}] Perplexity API response received, status:`, response.status);
       clearTimeout(timeoutId);
-      
-      console.log("Perplexity API response status:", response.status);
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -160,24 +167,27 @@ export async function POST(req: Request) {
       }
       
       const data = await response.json();
-      console.log("Perplexity API response data:", JSON.stringify(data).substring(0, 500) + "...");
+      console.log("Perplexity API response received successfully");
       
       return Response.json(data);
     } catch (fetchError) {
       clearTimeout(timeoutId);
-      console.error("Fetch error:", fetchError);
+      console.error("Fetch error:", fetchError instanceof Error ? fetchError.message : "Unknown error");
       
       if (fetchError instanceof Error) {
         if (fetchError.name === 'AbortError') {
           console.error("Request aborted due to timeout");
-          return Response.json({ error: "Request timed out after 120 seconds" }, { status: 504 });
+          return Response.json({ 
+            error: "Request timed out. Please try with a shorter prompt or fewer research items.",
+            partial_response: true
+          }, { status: 504 });
         }
       }
       
       throw fetchError; // Re-throw for the outer catch block
     }
   } catch (error) {
-    console.error("Error in Perplexity API route:", error);
+    console.error("Error in Perplexity API route:", error instanceof Error ? error.message : "Unknown error");
     
     if (error instanceof Error) {
       return Response.json({ error: `Error: ${error.message}` }, { status: 500 });

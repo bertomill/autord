@@ -279,7 +279,7 @@ For each reference cited in the content, you MUST provide a corresponding entry 
       
       // Add client-side timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout to match server-side
+      const timeoutId = setTimeout(() => controller.abort(), 50000); // 50 second timeout to match server-side
       
       // Get the selected template format
       const template = [...prebuiltTemplates, ...userTemplates].find(t => t.id === selectedTemplate);
@@ -301,19 +301,32 @@ For each reference cited in the content, you MUST provide a corresponding entry 
       // Add a reminder about references
       userMessage += "\n\nIMPORTANT: Include complete references with URLs for all sources cited in your response. Each reference should have an id, title, url, and date (if available).";
       
+      // Limit the number of research items to prevent timeouts
+      const limitedSelectedUpdates = selectedUpdates.slice(0, 3); // Limit to 3 research items
+      
       // Add selected research to the prompt if there are selected updates
-      if (selectedUpdates.length > 0) {
+      if (limitedSelectedUpdates.length > 0) {
         userMessage += "\n\nHere is some research to consider:\n\n";
         
         updates
-          .filter(update => update.id && selectedUpdates.includes(update.id as string))
+          .filter(update => update.id && limitedSelectedUpdates.includes(update.id as string))
           .forEach((update, index) => {
-            userMessage += `--- Source [${index + 1}]: ${update.title} ---\n${update.content}\n`;
+            // Limit the content length for each research item
+            const limitedContent = update.content.length > 1000 
+              ? update.content.substring(0, 1000) + "..." 
+              : update.content;
+              
+            userMessage += `--- Source [${index + 1}]: ${update.title} ---\n${limitedContent}\n`;
             if (update.link) {
               userMessage += `URL: ${update.link}\n`;
             }
             userMessage += "\n";
           });
+          
+        // If we limited the research items, let the user know
+        if (limitedSelectedUpdates.length < selectedUpdates.length) {
+          userMessage += `\n(Note: Only using ${limitedSelectedUpdates.length} of ${selectedUpdates.length} selected research items to prevent timeout.)\n`;
+        }
       }
       
       // Add template information to the prompt
@@ -332,9 +345,9 @@ For each reference cited in the content, you MUST provide a corresponding entry 
           model: selectedModel,
           prompt: userMessage,
           systemPrompt: systemPromptContent,
-          selectedUpdates: selectedUpdates.map(id => {
+          selectedUpdates: limitedSelectedUpdates.map(id => {
             const update = updates.find(u => u.id === id);
-            return update ? `${update.title}: ${update.content}` : '';
+            return update ? `${update.title}: ${update.content.substring(0, 1000)}...` : '';
           }).filter(Boolean),
           forceJsonOutput: selectedSystemPrompt === 'json-output',
           slideFormat: template?.format
@@ -378,11 +391,11 @@ For each reference cited in the content, you MUST provide a corresponding entry 
       
       // Provide user-friendly error message
       if (error instanceof Error && error.name === "AbortError") {
-        setApiError("Request timed out. The operation took too long to complete.");
+        setApiError("Request timed out. Try using a shorter prompt or fewer research items.");
       } else if (error instanceof Error && error.message.includes("SyntaxError")) {
         setApiError("Received invalid response format. This might be due to a service timeout or error.");
       } else if (error instanceof Error && error.message.includes("ERR_BLOCKED_BY_CLIENT")) {
-        setApiError("Your browser or an extension (like an ad blocker) is blocking some requests. Please disable ad blockers for this site and try again.");
+        setApiError("Your browser or an extension (like an ad blocker) is blocking Firestore requests. Please disable ad blockers for this site and try again.");
       } else {
         setApiError(`Error: ${error instanceof Error ? error.message : "An unknown error occurred"}`);
       }
