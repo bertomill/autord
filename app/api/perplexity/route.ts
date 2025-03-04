@@ -16,6 +16,11 @@
 
 import OpenAI from 'openai';
 
+// Add runtime configuration
+export const config = {
+  runtime: 'edge',
+};
+
 // Define interfaces for API requests and responses
 export interface PerplexityRequest {
   model: string;
@@ -80,14 +85,14 @@ export async function POST(req: Request) {
   
   try {
     const body = await req.json();
-    console.log("Request body:", JSON.stringify(body).substring(0, 500) + "..."); // Log truncated request for privacy
+    console.log("Request body:", JSON.stringify(body).substring(0, 500) + "...");
     
     // Add timeout handling
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
     
     console.log("Calling Perplexity API...");
-    const response = await fetch("https://api.perplexity.ai/...", {
+    const response = await fetch("https://api.perplexity.ai/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
