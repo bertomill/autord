@@ -373,16 +373,16 @@ For each reference cited in the content, you MUST provide a corresponding entry 
       
       // Move to the review tab
       setActiveTab('review-content');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error generating content:", error);
       
       // Provide user-friendly error message
-      if (error.name === "AbortError") {
+      if (error instanceof Error && error.name === "AbortError") {
         setApiError("Request timed out. The operation took too long to complete.");
-      } else if (error.message.includes("SyntaxError")) {
+      } else if (error instanceof Error && error.message.includes("SyntaxError")) {
         setApiError("Received invalid response format. This might be due to a service timeout or error.");
       } else {
-        setApiError(`Error: ${error.message}`);
+        setApiError(`Error: ${error instanceof Error ? error.message : "An unknown error occurred"}`);
       }
     } finally {
       setIsGenerating(false);

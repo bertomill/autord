@@ -1,8 +1,23 @@
-import { NextResponse } from 'next/server';
+// Remove or use the unused imports
+// If you need these types for documentation but don't use them directly,
+// you can prefix them with an underscore to tell ESLint to ignore them
+
+// For example, change:
+// import { NextResponse } from 'next/server';
+// To:
+// import { NextResponse } from 'next/server';  // Remove if not needed
+
+// Or for type definitions:
+// type _PerplexityRequest = {
+//   // ... type definition ...
+// };
+
+// Or simply remove the unused types/imports
+
 import OpenAI from 'openai';
 
 // Define interfaces for API requests and responses
-interface PerplexityRequest {
+export interface PerplexityRequest {
   model: string;
   prompt: string;
   systemPrompt?: string;
@@ -55,7 +70,7 @@ interface PerplexityUsage extends OpenAI.CompletionUsage {
 }
 
 // Extended response interface for Perplexity API
-interface PerplexityCompletionResponse extends OpenAI.Chat.ChatCompletion {
+export interface PerplexityCompletionResponse extends OpenAI.Chat.ChatCompletion {
   citations?: string[];
   usage?: PerplexityUsage;
 }
@@ -101,18 +116,20 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify(data), {
       headers: { "Content-Type": "application/json" }
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error in Perplexity API route:", error);
     
     // Check if it's an AbortError (timeout)
-    if (error.name === "AbortError") {
+    if (error instanceof Error && error.name === "AbortError") {
       return new Response(JSON.stringify({ error: "Request timed out after 25 seconds" }), {
         status: 504,
         headers: { "Content-Type": "application/json" }
       });
     }
     
-    return new Response(JSON.stringify({ error: error.message || "An error occurred" }), {
+    return new Response(JSON.stringify({ 
+      error: error instanceof Error ? error.message : "An error occurred" 
+    }), {
       status: 500,
       headers: { "Content-Type": "application/json" }
     });
