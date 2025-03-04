@@ -275,6 +275,12 @@ For each reference cited in the content, you MUST provide a corresponding entry 
     setApiError(null);
     
     try {
+      console.log("Starting content generation...");
+      
+      // Add client-side timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
       // Get the selected template format
       const template = [...prebuiltTemplates, ...userTemplates].find(t => t.id === selectedTemplate);
       
@@ -333,14 +339,27 @@ For each reference cited in the content, you MUST provide a corresponding entry 
           forceJsonOutput: selectedSystemPrompt === 'json-output',
           slideFormat: template?.format
         }),
+        signal: controller.signal,
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to generate content');
+      clearTimeout(timeoutId);
+      
+      console.log("API response status:", response.status);
+      
+      // Check for non-JSON responses
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const textResponse = await response.text();
+        console.error("Non-JSON response:", textResponse);
+        throw new Error(`Received non-JSON response: ${textResponse.substring(0, 100)}...`);
       }
       
       const data = await response.json();
+      console.log("Response data received:", Object.keys(data));
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
       
       // Process the response
       const content = data.content;
@@ -355,8 +374,16 @@ For each reference cited in the content, you MUST provide a corresponding entry 
       // Move to the review tab
       setActiveTab('review-content');
     } catch (error) {
-      console.error('Error generating content:', error);
-      setApiError(error instanceof Error ? error.message : 'An unknown error occurred');
+      console.error("Error generating content:", error);
+      
+      // Provide user-friendly error message
+      if (error.name === "AbortError") {
+        setApiError("Request timed out. The operation took too long to complete.");
+      } else if (error.message.includes("SyntaxError")) {
+        setApiError("Received invalid response format. This might be due to a service timeout or error.");
+      } else {
+        setApiError(`Error: ${error.message}`);
+      }
     } finally {
       setIsGenerating(false);
     }
