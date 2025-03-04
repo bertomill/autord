@@ -279,7 +279,7 @@ For each reference cited in the content, you MUST provide a corresponding entry 
       
       // Add client-side timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout to match server-side
       
       // Get the selected template format
       const template = [...prebuiltTemplates, ...userTemplates].find(t => t.id === selectedTemplate);
@@ -381,6 +381,8 @@ For each reference cited in the content, you MUST provide a corresponding entry 
         setApiError("Request timed out. The operation took too long to complete.");
       } else if (error instanceof Error && error.message.includes("SyntaxError")) {
         setApiError("Received invalid response format. This might be due to a service timeout or error.");
+      } else if (error instanceof Error && error.message.includes("ERR_BLOCKED_BY_CLIENT")) {
+        setApiError("Your browser or an extension (like an ad blocker) is blocking some requests. Please disable ad blockers for this site and try again.");
       } else {
         setApiError(`Error: ${error instanceof Error ? error.message : "An unknown error occurred"}`);
       }

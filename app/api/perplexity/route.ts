@@ -128,56 +128,61 @@ export async function POST(req: Request) {
       perplexityRequest.response_format = body.response_format;
     }
     
-    // Add timeout handling
+    // Add timeout handling with a longer timeout (120 seconds)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const timeoutId = setTimeout(() => {
+      console.log("Request timeout reached, aborting...");
+      controller.abort();
+    }, 120000); // Increase to 120 seconds
     
-    console.log("Calling Perplexity API with formatted request:", JSON.stringify(perplexityRequest).substring(0, 500) + "...");
-    const response = await fetch("https://api.perplexity.ai/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-      },
-      body: JSON.stringify(perplexityRequest),
-      signal: controller.signal,
-    });
+    console.log(`[${new Date().toISOString()}] Calling Perplexity API with formatted request:`, JSON.stringify(perplexityRequest).substring(0, 500) + "...");
     
-    clearTimeout(timeoutId);
-    
-    console.log("Perplexity API response status:", response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Perplexity API error:", errorText);
-      return new Response(JSON.stringify({ error: `API error: ${response.status} - ${errorText}` }), {
-        status: response.status,
-        headers: { "Content-Type": "application/json" }
+    try {
+      const response = await fetch("https://api.perplexity.ai/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        },
+        body: JSON.stringify(perplexityRequest),
+        signal: controller.signal,
       });
+      
+      console.log(`[${new Date().toISOString()}] Perplexity API response received`);
+      clearTimeout(timeoutId);
+      
+      console.log("Perplexity API response status:", response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Perplexity API error:", errorText);
+        return Response.json({ error: `Perplexity API error: ${response.status} ${errorText}` }, { status: response.status });
+      }
+      
+      const data = await response.json();
+      console.log("Perplexity API response data:", JSON.stringify(data).substring(0, 500) + "...");
+      
+      return Response.json(data);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      console.error("Fetch error:", fetchError);
+      
+      if (fetchError instanceof Error) {
+        if (fetchError.name === 'AbortError') {
+          console.error("Request aborted due to timeout");
+          return Response.json({ error: "Request timed out after 120 seconds" }, { status: 504 });
+        }
+      }
+      
+      throw fetchError; // Re-throw for the outer catch block
     }
-    
-    const data = await response.json();
-    console.log("Perplexity API response data:", JSON.stringify(data).substring(0, 500) + "...");
-    
-    return new Response(JSON.stringify(data), {
-      headers: { "Content-Type": "application/json" }
-    });
-  } catch (error: unknown) {
+  } catch (error) {
     console.error("Error in Perplexity API route:", error);
     
-    // Check if it's an AbortError (timeout)
-    if (error instanceof Error && error.name === "AbortError") {
-      return new Response(JSON.stringify({ error: "Request timed out after 45 seconds" }), {
-        status: 504,
-        headers: { "Content-Type": "application/json" }
-      });
+    if (error instanceof Error) {
+      return Response.json({ error: `Error: ${error.message}` }, { status: 500 });
     }
     
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : "An error occurred" 
-    }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" }
-    });
+    return Response.json({ error: "An unknown error occurred" }, { status: 500 });
   }
 } 
